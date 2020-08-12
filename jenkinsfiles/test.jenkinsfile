@@ -3,7 +3,7 @@
 
 def tools = org.devops.tools
 
-String workspace = "/opt/jenkins/workspace"
+String workspace = "/data/usr/jenkins/workspace"
 
 //Pipeline
 pipeline {
