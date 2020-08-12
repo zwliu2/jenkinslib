@@ -1,6 +1,8 @@
 #!groovy
 @Library('jenkinslib') _
 
+def tools = org.devops.tools
+
 String workspace = "/opt/jenkins/workspace"
 
 //Pipeline
@@ -27,6 +29,42 @@ pipeline {
                         input id: 'Test01_id', message: '是否继续下一步操作', ok: '是,继续吧！', parameters: [choice(choices: ['first', 'second'], description: '', name: 'test')], submitter: 'admin,liuzw'
                     }
                 }
+            }
+        }
+        stage("01") {
+            failFast true
+            parallel {
+               //构建
+                stage("Build"){
+                    steps{
+                        timeout(time:20, unit:"MINUTES"){
+                            script{
+                                println('应用打包')
+                                mvnHome = tool "maven3"
+                                println(mvnHome)
+                                sh "${mvnHome}/bin/mvn --version"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    //构建后的操作
+    post {
+        always {
+            script{
+                println("不管发生什么我都会执行的")
+            }
+        }
+        success {
+            script {
+               currentBuild.description ="\n 构建成功!"
+            }
+        }
+        failure {
+            script {
+               currentBuild.description ="\n 构建失败!"
             }
         }
     }
