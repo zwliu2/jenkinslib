@@ -7,10 +7,7 @@ String workspace = "/data/usr/jenkins/workspace"
 
 //Pipeline
 pipeline {
-    agent { node {label "master"
-                 customWorkspace "${workspace}"
-          }
-    }
+    agent any
     options {
         timestamps() //日志会有时间
         skipDefaultCheckout() //删除隐式checkout scm语句
