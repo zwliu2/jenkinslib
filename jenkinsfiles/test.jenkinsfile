@@ -7,7 +7,7 @@ String workspace = "/data/usr/jenkins/workspace"
 
 //Pipeline
 pipeline {
-    agent { node {lable "master"
+    agent { node {label "master"
                  customWorkspace "${workspace}"
           }
     }
