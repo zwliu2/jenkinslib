@@ -20,7 +20,7 @@ pipeline {
     stages {
         //下载代码
         stage("CloneCode"){
-            when {environment name: ''test', value: 'abcd'}
+            when { environment name: ''test', value: 'abcd' }
             steps{//步骤
                 timeout(time:5, unit:"MINUTES"){
                     script{
@@ -43,6 +43,17 @@ pipeline {
                                 mvnHome = tool "maven3"
                                 println(mvnHome)
                                 sh "${mvnHome}/bin/mvn --version"
+                            }
+                        }
+                    }
+                }
+                //代码扫描
+                stage("CodeScan"){
+                    steps{
+                        timeout(time:30, unit:"MINUTES"){
+                            script{
+                                println("代码扫描")
+                                tools.PrintMes("this is my lib!!", "green")
                             }
                         }
                     }
