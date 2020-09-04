@@ -1,6 +1,6 @@
 #!groovy
 
-@Library('jenkinslib@dev') _
+@Library('jenkinslib@master') _
 
 def tools = new org.devops.tools()
 def build = new org.devops.build()
