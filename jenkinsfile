@@ -1,0 +1,159 @@
+#!groovy
+
+@Library('jenkinslib@dev') _
+
+def tools = new org.devops.tools()
+def build = new org.devops.build()
+def gitlab = new org.devops.gitlab()
+def dockeraction = new org.devops.docker()
+
+String workspace = "/var/jenkins_home/workspace"
+
+//提交流水线
+String buildType = "${env.buildType}"
+String buildShell = "${env.buildShell}"
+String srcUrl = "${env.srcUrl}"
+String branchName = ""
+String tomerge = ""
+
+if ("${runOpts}" == "GitlabPush"){
+    if ("${objectKind}" == "push"){
+        branchName = branch - "refs/heads/"
+        gitlab.ChangeCommitStatus(projectId,commitSha,"running")
+        currentBuild.description = "Trigger by ${userName} ${branch}"
+    }
+}
+if ("${runOpts}" == "GitlabPush"){
+    if ("${objectKind}" == "merge_request"){
+        tomerge = "yes"
+    }
+}
+
+//Pipeline
+pipeline {
+    agent any
+    environment {
+		branchName="${branchName}"
+	}
+    options {
+        timestamps()  //日志会有时间
+        skipDefaultCheckout()  //删除隐式checkout scm语句
+        disableConcurrentBuilds() //禁止并行
+        timeout(time: 1, unit: 'HOURS')  //流水线超时设置1h
+    }
+
+    stages {
+        //下载代码
+        stage("CloneCode"){ //阶段名称
+            when { environment name: 'branchName', value: 'dev' }
+            steps{  //步骤
+                timeout(time:5, unit:"MINUTES"){   //步骤超时时间
+                    script{ //填写运行代码
+                        tools.PrintMes("获取代码",'green')
+      
+                        checkout([$class: 'GitSCM', branches: [[name: "${branchName}"]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '10f5beda-6572-416f-a11d-4db21940d2c9', url: "${srcUrl}"]]])
+                        println("${branchName}")
+                        
+                        //input id: 'Test', message: '我们是否要继续？', ok: '是，继续吧！', parameters: [choice(choices: ['a', 'b'], description: '', name: 'test1')], submitter: 'liuzw,admin'
+                    }
+                }
+            }
+        }
+
+        stage("01"){
+            when { environment name: 'branchName', value: 'dev' }
+            failFast true
+            parallel {
+        
+                stage('Build'){
+                    steps{
+                        timeout(time:30, unit:"MINUTES"){
+                            script{
+                                println('应用打包...')
+                                build.CodeBuild(buildType, buildShell)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        //下载代码
+        stage("Deploy"){ //阶段名称
+            when { environment name: 'branchName', value: 'dev' }
+            steps{  //步骤
+                timeout(time:5, unit:"MINUTES"){   //步骤超时时间
+                    script{ //填写运行代码
+                        tools.PrintMes("连接远程主机",'green')
+                        // 获取部署主机位置
+                        result = build.GetDeployInfo(projectName,branchName,"jenkinsrequest")
+                        
+                        if ("${result.status}" == "200"){
+                            if ("${result.msg.server_exist}" == "YES"){
+                                    //说明服务已经部署了
+                                    println("部署了,所以只需要覆盖下就行了")
+                                    //传递jar deployhost projectName就行了
+                                    build.RemoteOne("${WORKSPACE}",projectName,"${result.msg.deployhost}")
+
+                            } else if ("${result.msg.yaml_exist}" == "YES"){
+                                    println("未部署但是他所在的服务器上已经有其他服务部署了,需要部署到${result.msg.deployhost}")
+                                    //传递jar deployhost projectName  此时需要执行py脚本了 给脚本一个参数projectName        
+                                    build.RemoteTwo("${WORKSPACE}",projectName,"${result.msg.deployhost}")
+
+                            } else {
+                                // 说明该服务器上是第一次部署应用
+                                    build.RemoteThree("${WORKSPACE}",projectName,"${result.msg.deployhost}")
+                            }
+                        } else {
+                            println("接口返回错误！")
+                        }
+                    }
+                }
+            }
+        }
+        //合并代码
+        stage("MergeCode"){ //阶段名称
+            when { environment name: 'tomerge', value: 'yes' }
+            steps{  //步骤
+                timeout(time:5, unit:"MINUTES"){   //步骤超时时间
+                    script{ //填写运行代码
+                        println("代码合并")
+                        gitlab.AcceptMr(projectId,mergeId)
+                        println("${mergeId}")
+                        println("${projectId}") 
+                    }
+                }
+            }
+        }
+
+    }
+
+    //构建后操作
+    post {
+        always {
+            script{
+                println("always")
+            }
+        }
+
+        success {
+            script{
+                currentBuild.description = currentBuild.description + "\n 构建成功!" 
+                gitlab.ChangeCommitStatus(projectId,commitSha,"success")
+            }
+        }
+
+        failure {
+            script{
+                currentBuild.description = currentBuild.description + "\n 构建失败!" 
+                gitlab.ChangeCommitStatus(projectId,commitSha,"failed")
+            }
+        }
+
+        aborted {
+            script{
+                currentBuild.description = currentBuild.description + "\n 构建取消!" 
+                gitlab.ChangeCommitStatus(projectId,commitSha,"canceled")
+            }
+        }
+    }
+}
